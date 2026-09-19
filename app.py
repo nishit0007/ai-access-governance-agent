@@ -3,6 +3,8 @@ import pandas as pd
 from openai import OpenAI
 from PyPDF2 import PdfReader
 from docx import Document
+from PIL import Image
+import pytesseract
 
 from io import BytesIO
 from datetime import datetime
@@ -156,48 +158,91 @@ if not api_key:
 client = OpenAI(api_key=api_key)
 
 # =========================================================
-# READ POLICY FILE
+# READ EVIDENCE FILES
 # =========================================================
 
-def read_policy_file(uploaded_file):
-
+def extract_text_from_file(uploaded_file):
+    """Extract readable text from TXT, DOCX, PDF and image evidence."""
     file_name = uploaded_file.name.lower()
 
     if file_name.endswith(".txt"):
-
-        return uploaded_file.getvalue().decode(
-            "utf-8",
-            errors="ignore"
-        )
+        return uploaded_file.getvalue().decode("utf-8", errors="ignore")
 
     elif file_name.endswith(".docx"):
-
         document = Document(uploaded_file)
-
-        paragraphs = []
-
-        for paragraph in document.paragraphs:
-            if paragraph.text.strip():
-                paragraphs.append(paragraph.text)
-
+        paragraphs = [
+            paragraph.text.strip()
+            for paragraph in document.paragraphs
+            if paragraph.text.strip()
+        ]
         return "\n".join(paragraphs)
 
     elif file_name.endswith(".pdf"):
-
         reader = PdfReader(uploaded_file)
-
         pages = []
-
         for page in reader.pages:
-
             text = page.extract_text()
-
             if text:
                 pages.append(text)
-
         return "\n".join(pages)
 
+    elif file_name.endswith((".png", ".jpg", ".jpeg", ".webp")):
+        image = Image.open(uploaded_file)
+        return pytesseract.image_to_string(image)
+
     return ""
+
+
+def read_policy_file(uploaded_file):
+    """Read the internal IAM policy from supported formats."""
+    return extract_text_from_file(uploaded_file)
+
+
+# =========================================================
+# READ ACCESS REPORT
+# =========================================================
+
+def read_access_report(uploaded_file):
+    """Read tabular access reports or convert other evidence to a DataFrame."""
+    file_name = uploaded_file.name.lower()
+
+    if file_name.endswith(".csv"):
+        return pd.read_csv(uploaded_file)
+
+    elif file_name.endswith((".xlsx", ".xls")):
+        return pd.read_excel(uploaded_file)
+
+    else:
+        evidence_text = extract_text_from_file(uploaded_file)
+        if evidence_text.strip():
+            return pd.DataFrame({"Evidence Text": [evidence_text]})
+
+    return None
+
+
+def combine_additional_evidence(uploaded_files):
+    """Extract text from additional evidence files in different formats."""
+    evidence_sections = []
+
+    for uploaded_file in uploaded_files or []:
+        try:
+            extracted_text = extract_text_from_file(uploaded_file)
+            if extracted_text.strip():
+                evidence_sections.append(
+                    f"FILE: {uploaded_file.name}\n{extracted_text}"
+                )
+            else:
+                evidence_sections.append(
+                    f"FILE: {uploaded_file.name}\n"
+                    "Information could not be extracted from this file."
+                )
+        except Exception as error:
+            evidence_sections.append(
+                f"FILE: {uploaded_file.name}\n"
+                f"Extraction failed: {error}"
+            )
+
+    return "\n\n".join(evidence_sections)
 
 
 # =========================================================
@@ -369,7 +414,7 @@ def create_pdf_report(summary_text, report_date):
 # =========================================================
 
 st.markdown("## 📥 Evidence Workspace")
-st.caption("Provide the two evidence sources required for the access governance review.")
+st.caption("Provide the core evidence sources and, if available, upload additional supporting evidence.")
 
 upload_col1, upload_col2 = st.columns(2, gap="large")
 
@@ -381,8 +426,11 @@ with upload_col1:
     </div>
     """, unsafe_allow_html=True)
     access_file = st.file_uploader(
-        "Choose access report",
-        type=["xlsx", "xls", "csv"],
+        "Choose access report or evidence",
+        type=[
+            "xlsx", "xls", "csv", "pdf", "docx", "txt",
+            "png", "jpg", "jpeg", "webp"
+        ],
         key="access_report_uploader"
     )
 
@@ -394,10 +442,33 @@ with upload_col2:
     </div>
     """, unsafe_allow_html=True)
     policy_file = st.file_uploader(
-        "Choose IAM policy",
-        type=["pdf", "docx", "txt"],
+        "Choose IAM policy or control document",
+        type=[
+            "pdf", "docx", "txt",
+            "png", "jpg", "jpeg", "webp"
+        ],
         key="iam_policy_uploader"
     )
+
+st.markdown("### 🗂️ Additional Audit Evidence")
+st.caption(
+    "Image files are processed with OCR to extract visible text. "
+    "OCR results should be checked against the original screenshot."
+)
+st.caption(
+    "Optionally upload screenshots, PDFs, Word files, text files, spreadsheets, "
+    "or other supporting evidence."
+)
+additional_evidence_files = st.file_uploader(
+    "Upload supporting evidence files",
+    type=[
+        "png", "jpg", "jpeg", "webp",
+        "pdf", "docx", "txt",
+        "csv", "xlsx", "xls"
+    ],
+    accept_multiple_files=True,
+    key="additional_evidence_uploader"
+)
 
 
 # =========================================================
@@ -406,7 +477,7 @@ with upload_col2:
 
 if access_file and policy_file:
 
-    st.success("Evidence package received. Both files are ready for validation.")
+    st.success("Evidence package received. Your files are ready for validation.")
 
     try:
 
@@ -421,6 +492,9 @@ if access_file and policy_file:
         # -------------------------------------------------
 
         policy_text = read_policy_file(policy_file)
+        additional_evidence_text = combine_additional_evidence(
+            additional_evidence_files
+        )
 
         # -------------------------------------------------
         # VALIDATION
@@ -493,6 +567,12 @@ INTERNAL IAM / ACCESS POLICY
 ==================================================
 
 {policy_text}
+
+==================================================
+ADDITIONAL AUDIT EVIDENCE
+==================================================
+
+{additional_evidence_text}
 
 ==================================================
 IMPORTANT RULES
