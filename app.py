@@ -31,17 +31,112 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🔐 AI Access Governance Agent")
+# =========================================================
+# VISUAL DESIGN
+# =========================================================
 
-st.write(
-    "Upload a User Access Report and your Internal IAM / Access Policy. "
-    "The AI agent will identify access governance risks and provide "
-    "practical corrective actions."
-)
+st.markdown("""
+<style>
+    .stApp {
+        background: linear-gradient(135deg, #0b1020 0%, #111827 48%, #0b132b 100%);
+    }
+
+    .block-container {
+        max-width: 1200px;
+        padding-top: 2rem;
+        padding-bottom: 3rem;
+    }
+
+    .hero {
+        padding: 2rem 2.2rem;
+        border: 1px solid rgba(96, 165, 250, 0.28);
+        border-radius: 24px;
+        background: linear-gradient(135deg, rgba(30, 41, 59, 0.96), rgba(15, 23, 42, 0.90));
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+        margin-bottom: 1.5rem;
+    }
+
+    .hero h1 {
+        font-size: 2.65rem;
+        margin: 0;
+        color: #f8fafc;
+        letter-spacing: -1px;
+    }
+
+    .hero p {
+        color: #cbd5e1;
+        font-size: 1.05rem;
+        margin-top: 0.8rem;
+        line-height: 1.6;
+    }
+
+    .badge {
+        display: inline-block;
+        padding: 0.35rem 0.75rem;
+        border-radius: 999px;
+        background: rgba(34, 197, 94, 0.13);
+        border: 1px solid rgba(34, 197, 94, 0.35);
+        color: #86efac;
+        font-size: 0.8rem;
+        font-weight: 600;
+        margin-bottom: 0.8rem;
+    }
+
+    .section-card {
+        padding: 1.25rem;
+        border-radius: 18px;
+        border: 1px solid rgba(148, 163, 184, 0.20);
+        background: rgba(15, 23, 42, 0.72);
+        min-height: 150px;
+    }
+
+    .section-card h3 {
+        color: #e2e8f0;
+        margin-top: 0;
+    }
+
+    .section-card p {
+        color: #94a3b8;
+        font-size: 0.92rem;
+    }
+
+    .footer-note {
+        text-align: center;
+        color: #64748b;
+        font-size: 0.8rem;
+        margin-top: 2.5rem;
+    }
+
+    div[data-testid="stFileUploader"] {
+        border: 1px dashed rgba(96, 165, 250, 0.55);
+        border-radius: 14px;
+        padding: 0.55rem;
+        background: rgba(30, 41, 59, 0.45);
+    }
+
+    div.stButton > button {
+        border-radius: 12px;
+        font-weight: 700;
+        padding: 0.7rem 1rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<div class="hero">
+    <div class="badge">● IAM RISK INTELLIGENCE PLATFORM</div>
+    <h1>🔐 GRC Sentinel AI</h1>
+    <p>
+        AI-powered access governance and risk analysis for IAM and IT audit reviews.
+        Upload an access report and your internal policy to identify risks,
+        assess alignment, and generate practical corrective actions.
+    </p>
+</div>
+""", unsafe_allow_html=True)
 
 st.info(
-    "This tool supports IAM and IT audit reviews. "
-    "Findings should be validated by the responsible business and security teams."
+    "Use this tool as an audit-support assistant. All findings must be validated "
+    "by the responsible business, IAM, and security teams before action is taken."
 )
 
 
@@ -51,9 +146,14 @@ st.info(
 import os
 from openai import OpenAI
 
-client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY")
-)
+# Prefer Streamlit Secrets in deployment; fall back to environment variables locally.
+api_key = st.secrets.get("OPENAI_API_KEY") if "OPENAI_API_KEY" in st.secrets else os.getenv("OPENAI_API_KEY")
+
+if not api_key:
+    st.error("OPENAI_API_KEY is not configured. Add it in Streamlit Secrets.")
+    st.stop()
+
+client = OpenAI(api_key=api_key)
 
 # =========================================================
 # READ POLICY FILE
@@ -268,20 +368,36 @@ def create_pdf_report(summary_text, report_date):
 # FILE UPLOAD
 # =========================================================
 
-st.header("1. Upload User Access Report")
+st.markdown("## 📥 Evidence Workspace")
+st.caption("Provide the two evidence sources required for the access governance review.")
 
-access_file = st.file_uploader(
-    "Upload Excel or CSV access report",
-    type=["xlsx", "xls", "csv"]
-)
+upload_col1, upload_col2 = st.columns(2, gap="large")
 
+with upload_col1:
+    st.markdown("""
+    <div class="section-card">
+        <h3>📊 User Access Report</h3>
+        <p>Upload an Excel or CSV file containing user, role, application, and access information.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    access_file = st.file_uploader(
+        "Choose access report",
+        type=["xlsx", "xls", "csv"],
+        key="access_report_uploader"
+    )
 
-st.header("2. Upload Internal IAM / Access Policy")
-
-policy_file = st.file_uploader(
-    "Upload your internal access policy",
-    type=["pdf", "docx", "txt"]
-)
+with upload_col2:
+    st.markdown("""
+    <div class="section-card">
+        <h3>📄 Internal IAM Policy</h3>
+        <p>Upload the internal access policy that will be used as the control baseline.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    policy_file = st.file_uploader(
+        "Choose IAM policy",
+        type=["pdf", "docx", "txt"],
+        key="iam_policy_uploader"
+    )
 
 
 # =========================================================
@@ -290,7 +406,7 @@ policy_file = st.file_uploader(
 
 if access_file and policy_file:
 
-    st.success("Both files uploaded successfully.")
+    st.success("Evidence package received. Both files are ready for validation.")
 
     try:
 
@@ -330,7 +446,7 @@ if access_file and policy_file:
         # DISPLAY ACCESS REPORT
         # -------------------------------------------------
 
-        st.subheader("User Access Report")
+        st.markdown("## 🔎 Evidence Preview")
 
         st.dataframe(
             access_df,
@@ -616,7 +732,7 @@ Keep this PDF EXECUTIVE SUMMARY concise.
                         "Access governance analysis completed."
                     )
 
-                    st.header("📊 Detailed Access Governance Analysis")
+                    st.markdown("## 📊 Access Governance Findings")
 
                     st.markdown(result)
 
@@ -656,7 +772,7 @@ Keep this PDF EXECUTIVE SUMMARY concise.
                     # DOWNLOAD SECTION
                     # -------------------------------------------------
 
-                    st.header("📄 Management Report")
+                    st.markdown("## 📄 Management Report")
 
                     st.write(
                         "A summarized PDF containing the key findings "
@@ -691,3 +807,10 @@ else:
         "Please upload both the User Access Report "
         "and the Internal IAM Policy."
     )
+
+
+st.markdown("""
+<div class="footer-note">
+    GRC Sentinel AI • IAM & Access Governance • Validate findings before taking action
+</div>
+""", unsafe_allow_html=True)
