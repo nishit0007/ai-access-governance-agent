@@ -414,7 +414,7 @@ def create_pdf_report(summary_text, report_date):
 # =========================================================
 
 st.markdown("## Evidence Workspace")
-st.caption("Provide the core evidence sources and, if available, upload additional supporting evidence.")
+st.caption("Provide the core evidence sources for access governance analysis.")
 
 upload_col1, upload_col2 = st.columns(2, gap="large")
 
@@ -450,25 +450,6 @@ with upload_col2:
     key="iam_policy_uploader"
   )
 
-st.markdown("### Additional Audit Evidence")
-st.caption(
-  "Image files are processed with OCR to extract visible text. "
-  "OCR results should be checked against the original screenshot."
-)
-st.caption(
-  "Optionally upload screenshots, PDFs, Word files, text files, spreadsheets, "
-  "or other supporting evidence."
-)
-additional_evidence_files = st.file_uploader(
-  "Upload supporting evidence files",
-  type=[
-    "png", "jpg", "jpeg", "webp",
-    "pdf", "docx", "txt",
-    "csv", "xlsx", "xls"
-  ],
-  accept_multiple_files=True,
-  key="additional_evidence_uploader"
-)
 
 
 # =========================================================
@@ -492,10 +473,6 @@ if access_file and policy_file:
     # -------------------------------------------------
 
     policy_text = read_policy_file(policy_file)
-    additional_evidence_text = combine_additional_evidence(
-      additional_evidence_files
-    )
-
     # -------------------------------------------------
     # VALIDATION
     # -------------------------------------------------
@@ -567,12 +544,6 @@ INTERNAL IAM / ACCESS POLICY
 ==================================================
 
 {policy_text}
-
-==================================================
-ADDITIONAL AUDIT EVIDENCE
-==================================================
-
-{additional_evidence_text}
 
 ==================================================
 IMPORTANT RULES
